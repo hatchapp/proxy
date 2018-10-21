@@ -13,10 +13,10 @@ function getRoute(url){
 	return roomId;
 }
 
-function getSocketServerURL({ id, meta: { socketServerPort } }, url){
+function getSocketServerURL({ id, meta: { socketServerPort } }){
 	const idx = id.indexOf(':');
 	const base = idx !== -1 ? id.substring(0, idx) : id;
-	return 'http://' + base + ':' + socketServerPort + url;
+	return 'http://' + base + ':' + socketServerPort;
 }
 
 /**
@@ -38,16 +38,23 @@ async function getBaseHost(base_host){
 	return lookup(config.hashring.base_host, { family: 4 });
 }
 
+function routeToGameServer(ring, url){
+	const route = getRoute(url);
+	if(!route) return null;
+	const lookup = ring.lookup(route);
+	return getSocketServerURL(lookup);
+}
+
 async function main(){
 	const { address: baseHost } = await getBaseHost(config.hashring.base_host);
 	const ring = hashring({ base: [`${baseHost}:${config.hashring.base_port}`], client: true });
 	await waitForHashring(ring);
 
-	function resolver(host, url, req){
-		const route = getRoute(url);
-		if(!route) return null;
-		const lookup = ring.lookup(route);
-		return getSocketServerURL(lookup, url);
+	function resolver(host, url){
+		if(url.startsWith('/socket.io/')){
+			return routeToGameServer(ring, url)
+		}
+		return `http://${config.api.host}:${config.api.port}`;
 	}
 
 	const proxy = redbird({
