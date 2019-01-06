@@ -45,10 +45,27 @@ function routeToGameServer(ring, url){
 	return getSocketServerURL(lookup);
 }
 
+function withRetry(generatorFunc, times) {
+	return (
+		generatorFunc()
+			.catch(err =>
+				times > 0
+					? withRetry(generatorFunc, times - 1)
+					: Promise.reject(err)
+			)
+	);
+}
+
+async function createHashring(host, port) {
+	const ring = hashring({ base: [`${host}:${port}`], client: true });
+
+	await waitForHashring(ring);
+	return ring;
+}
+
 async function main(){
 	const { address: baseHost } = await getBaseHost(config.hashring.base_host);
-	const ring = hashring({ base: [`${baseHost}:${config.hashring.base_port}`], client: true });
-	await waitForHashring(ring);
+	const ring = await withRetry(() => createHashring(baseHost, config.hashring.base_port), 3);
 
 	function resolver(host, url){
 		if(url.startsWith('/socket.io/')){
